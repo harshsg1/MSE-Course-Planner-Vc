@@ -1,4 +1,8 @@
-export const PARSE_EQUIVALENTS_FIXTURES = [
+export const PARSE_EQUIVALENTS_FIXTURES: {
+  input: string;
+  expected: string[];
+  selfCode?: string;
+}[] = [
   {
     input: "PHYS 126 or 121 or 102",
     expected: ["PHYS 126", "PHYS 121", "PHYS 102"],
@@ -21,4 +25,4 @@ export const PARSE_EQUIVALENTS_FIXTURES = [
     expected: ["SEE 222", "ENSC 231", "ENSC 330"],
     selfCode: "MSE 220",
   },
-] as const;
+] ;

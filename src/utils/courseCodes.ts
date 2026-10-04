@@ -4,6 +4,23 @@ export function normalizeCourseCode(code: string): string {
   return code.replace(/\s+/g, " ").trim().toUpperCase();
 }
 
+/** Real SFU codes like "MSE 102" or "PHYS 141". Rejects CO-OP, COMP ELEC, 4XX slots. */
+export function parseCourseCode(code: string): { dept: string; number: string } | null {
+  const match = code.trim().match(/^([A-Za-z]{2,8})\s+([A-Za-z0-9]{1,6})$/);
+  if (!match) return null;
+  return { dept: match[1].toLowerCase(), number: match[2].toLowerCase() };
+}
+
+export function isPlaceholderCourse(course: { code: string }): boolean {
+  return parseCourseCode(course.code) === null;
+}
+
+export function courseDepartment(course: { code: string }): string {
+  if (isPlaceholderCourse(course)) return "Slots";
+  const parsed = parseCourseCode(course.code);
+  return parsed ? parsed.dept.toUpperCase() : "Slots";
+}
+
 export function buildCourseCodeIndex(courses: Course[]): Map<string, string> {
   const index = new Map<string, string>();
   for (const course of courses) {

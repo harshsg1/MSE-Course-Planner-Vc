@@ -34,3 +34,31 @@ export function slotCourseIds(slot: CourseSlot): string[] {
 export function isChoiceGroup(slot: CourseSlot): boolean {
   return Array.isArray(slot) && slot.length > 1;
 }
+
+export function groupTermsByYear<T extends { label: string }>(
+  terms: T[]
+): { year: number; terms: T[] }[] {
+  const grouped = new Map<number, T[]>();
+
+  for (const term of terms) {
+    const match = term.label.match(/Year\s+(\d+)/i);
+    const yearNumber = match ? Number(match[1]) : 0;
+    const yearTerms = grouped.get(yearNumber) ?? [];
+    yearTerms.push(term);
+    grouped.set(yearNumber, yearTerms);
+  }
+
+  const termOrder = (label: string): number => {
+    if (label.includes("Fall")) return 0;
+    if (label.includes("Spring")) return 1;
+    if (label.includes("Summer")) return 2;
+    return 3;
+  };
+
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([year, yearTerms]) => ({
+      year,
+      terms: [...yearTerms].sort((a, b) => termOrder(a.label) - termOrder(b.label)),
+    }));
+}
