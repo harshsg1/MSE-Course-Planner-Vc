@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-do
 import { WelcomeModal } from "./components/WelcomeModal";
 import { useTheme } from "./context/ThemeContext";
 import { useWelcomeModal } from "./hooks/useWelcomeModal";
-import { courseById, courseEquivalencies, pageTemplates } from "./data";
+import { courseById, courseEquivalencies, courses, pageTemplates } from "./data";
 import {
   fetchSectionsForTerm,
   findHistoricalOffering,
@@ -21,9 +21,13 @@ import {
   TermPlan,
   VariantId,
 } from "./types";
+import { buildCourseCodeIndex, normalizeCourseCode } from "./utils/courseCodes";
 import { courseDependencyGraph } from "./utils/dependencyGraph";
+import { parseEquivalents } from "./utils/parseEquivalents";
 import { getActiveTerms, slotCourseIds } from "./utils/scheduleTerms";
 import { computeCompletedCredits, computeTotalCurriculumCredits } from "./utils/credits";
+
+const courseIdByCode = buildCourseCodeIndex(courses);
 
 // ─── SFU API Types (outline panel only) ──────────────────────────────────────
 
@@ -53,83 +57,98 @@ function parseCourseCode(code: string): { dept: string; number: string } | null 
   return { dept: match[1].toLowerCase(), number: match[2].toLowerCase() };
 }
 
-function useLiveCourseData(course: Course | null): LiveCourseData {
+const liveCourseCache = new Map<string, LiveCourseData>();
+
+async function fetchLiveCourseData(dept: string, number: string): Promise<LiveCourseData> {
+  const [currentResult, registrationResult] = await Promise.all([
+    fetchSectionsForTerm("current/current", dept, number),
+    fetchSectionsForTerm("registration/registration", dept, number),
+  ]);
+
+  const currentSections = currentResult?.sections ?? [];
+  const registrationSections = registrationResult?.sections ?? [];
+
+  if (currentSections.length === 0 && registrationSections.length === 0) {
+    const historical = await findHistoricalOffering(dept, number, 6);
+
+    if (historical) {
+      return {
+        status: "success",
+        sharedOutline: historical.sharedOutline,
+        sections: historical.sections,
+        isHistorical: true,
+        historicalLabel: termTupleToLabel(historical),
+      };
+    }
+
+    return { status: "not-offered", sharedOutline: null, sections: [] };
+  }
+
+  const resolved = await resolveOfferedSections(dept, number, [
+    currentResult,
+    registrationResult,
+  ]);
+
+  if (!resolved || resolved.sections.length === 0) {
+    return { status: "not-offered", sharedOutline: null, sections: [] };
+  }
+
+  return {
+    status: "success",
+    sharedOutline: resolved.sharedOutline,
+    sections: resolved.sections,
+  };
+}
+
+function useLiveCourseData(courseCode: string | null): LiveCourseData {
   const [state, setState] = useState<LiveCourseData>({ status: "idle", sharedOutline: null, sections: [] });
 
   useEffect(() => {
-    if (!course) {
+    if (!courseCode) {
       setState({ status: "idle", sharedOutline: null, sections: [] });
       return;
     }
 
-    // Parse inside the effect so the closure always has the current course code
-    const parsed = parseCourseCode(course.code);
+    const cacheKey = normalizeCourseCode(courseCode);
+    const cached = liveCourseCache.get(cacheKey);
+    if (cached) {
+      setState(cached);
+      return;
+    }
+
+    const parsed = parseCourseCode(courseCode);
     if (!parsed) {
-      setState({ status: "not-offered", sharedOutline: null, sections: [] });
+      const notOffered: LiveCourseData = { status: "not-offered", sharedOutline: null, sections: [] };
+      liveCourseCache.set(cacheKey, notOffered);
+      setState(notOffered);
       return;
     }
 
     let cancelled = false;
     setState({ status: "loading", sharedOutline: null, sections: [] });
 
-    async function fetchData() {
+    async function load() {
       try {
-        const { dept, number } = parsed!;
-
-        // Fetch both terms concurrently; each may return sections or null
-        const [currentResult, registrationResult] = await Promise.all([
-          fetchSectionsForTerm("current/current", dept, number),
-          fetchSectionsForTerm("registration/registration", dept, number),
-        ]);
-
-        const currentSections = currentResult?.sections ?? [];
-        const registrationSections = registrationResult?.sections ?? [];
-
-        if (currentSections.length === 0 && registrationSections.length === 0) {
-          const historical = await findHistoricalOffering(dept, number, 6);
-          if (cancelled) return;
-
-          if (historical) {
-            setState({
-              status: "success",
-              sharedOutline: historical.sharedOutline,
-              sections: historical.sections,
-              isHistorical: true,
-              historicalLabel: termTupleToLabel(historical),
-            });
-          } else {
-            setState({ status: "not-offered", sharedOutline: null, sections: [] });
-          }
-          return;
-        }
-
-        const resolved = await resolveOfferedSections(dept, number, [
-          currentResult,
-          registrationResult,
-        ]);
-
-        if (!resolved || resolved.sections.length === 0) {
-          if (!cancelled) setState({ status: "not-offered", sharedOutline: null, sections: [] });
-          return;
-        }
-
-        if (!cancelled) {
-          setState({
-            status: "success",
-            sharedOutline: resolved.sharedOutline,
-            sections: resolved.sections,
-          });
-        }
+        const result = await fetchLiveCourseData(parsed!.dept, parsed!.number);
+        liveCourseCache.set(cacheKey, result);
+        if (!cancelled) setState(result);
       } catch (err) {
-        if (!cancelled) {
-          setState({ status: "error", sharedOutline: null, sections: [], errorMsg: String(err) });
-        }
+        const errorResult: LiveCourseData = {
+          status: "error",
+          sharedOutline: null,
+          sections: [],
+          errorMsg: String(err),
+        };
+        liveCourseCache.set(cacheKey, errorResult);
+        if (!cancelled) setState(errorResult);
       }
     }
 
-    fetchData();
-    return () => { cancelled = true; };
-  }, [course?.id]);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseCode]);
 
   return state;
 }
@@ -193,6 +212,7 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
   const template = pageTemplates.find((p) => p.id === pageId) ?? pageTemplates[0];
   const [variant, setVariant] = useState<VariantId>("A" as VariantId);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedEquivalentCode, setSelectedEquivalentCode] = useState<string | null>(null);
   const [recursiveHighlights, setRecursiveHighlights] = useState(true);
 
   // ── Completion / transfer-credit progress ──
@@ -269,15 +289,23 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
   };
 
   useEffect(() => {
+    setSelectedEquivalentCode(null);
+  }, [selectedCourse?.id]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedCourse(null);
+        if (selectedEquivalentCode) {
+          setSelectedEquivalentCode(null);
+        } else {
+          setSelectedCourse(null);
+        }
       }
     };
 
     window.addEventListener("keydown", onKeyDown as unknown as EventListener);
     return () => window.removeEventListener("keydown", onKeyDown as unknown as EventListener);
-  }, []);
+  }, [selectedEquivalentCode]);
 
   const relationshipHighlights = useMemo(
     () => courseDependencyGraph.getHighlights(selectedCourse?.id ?? null, recursiveHighlights),
@@ -312,15 +340,66 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
       }));
   }, [terms]);
 
-  const selectedEquivalencies = useMemo(() => {
-    if (!selectedCourse) return [];
-    return courseEquivalencies
-      .filter((item) => item.sourceCourseId === selectedCourse.id)
-      .map((item) => ({ ...item, equivalentCourse: courseById[item.equivalentCourseId] }))
-      .filter((item) => Boolean(item.equivalentCourse));
-  }, [selectedCourse]);
+  const liveData = useLiveCourseData(selectedCourse?.code ?? null);
 
-  const liveData = useLiveCourseData(selectedCourse);
+  const equivalentBoxes = useMemo(() => {
+    if (!selectedCourse) return [];
+
+    type EquivalentBox = {
+      code: string;
+      title?: string;
+      fromOutline: boolean;
+      fromSeed: boolean;
+    };
+
+    const byCode = new Map<string, EquivalentBox>();
+
+    for (const item of courseEquivalencies) {
+      if (item.sourceCourseId !== selectedCourse.id) continue;
+      const equivalentCourse = courseById[item.equivalentCourseId];
+      if (!equivalentCourse) continue;
+
+      const normalized = normalizeCourseCode(equivalentCourse.code);
+      const existing = byCode.get(normalized);
+      if (existing) {
+        existing.fromSeed = true;
+        if (!existing.title) existing.title = equivalentCourse.title;
+      } else {
+        byCode.set(normalized, {
+          code: equivalentCourse.code,
+          title: equivalentCourse.title,
+          fromOutline: false,
+          fromSeed: true,
+        });
+      }
+    }
+
+    const sharedOutline = liveData.sharedOutline;
+    if (sharedOutline?.notes) {
+      const parsed = parseEquivalents(sharedOutline.notes, selectedCourse.code);
+      for (const item of parsed) {
+        const normalized = normalizeCourseCode(item.code);
+        const existing = byCode.get(normalized);
+        const courseId =
+          courseIdByCode.get(normalized) ?? courseIdByCode.get(normalized.replace(/\s+/g, ""));
+        const knownCourse = courseId ? courseById[courseId] : undefined;
+
+        if (existing) {
+          existing.fromOutline = true;
+          if (!existing.title && knownCourse) existing.title = knownCourse.title;
+        } else {
+          byCode.set(normalized, {
+            code: item.code,
+            title: knownCourse?.title,
+            fromOutline: true,
+            fromSeed: false,
+          });
+        }
+      }
+    }
+
+    return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
+  }, [selectedCourse, liveData.sharedOutline]);
 
   // ── Credits totals ──
   const totalCurriculumCredits = useMemo(
@@ -485,21 +564,35 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
               </div>
 
               {/* ── Equivalencies ── */}
-              <h4>Equivalent Courses (Other Faculties)</h4>
-              {selectedEquivalencies.length ? (
-                <ul>
-                  {selectedEquivalencies.map((eq) => (
-                    <li key={`${eq.sourceCourseId}-${eq.equivalentCourseId}`}>
-                      {eq.equivalentCourse?.code} ({eq.faculty}, {eq.equivalencyType})
-                    </li>
+              <h4>Equivalent Courses</h4>
+              {equivalentBoxes.length ? (
+                <div className="equiv-grid" role="list">
+                  {equivalentBoxes.map((box) => (
+                    <EquivalentBoxCard
+                      key={box.code}
+                      box={box}
+                      isActive={selectedEquivalentCode === box.code}
+                      onSelect={() =>
+                        setSelectedEquivalentCode((current) =>
+                          current === box.code ? null : box.code
+                        )
+                      }
+                    />
                   ))}
-                </ul>
+                </div>
               ) : (
-                <p className="empty-note">No equivalencies listed in the seed data yet.</p>
+                <p className="empty-note">No equivalencies found.</p>
               )}
             </>
           ) : (
             <p className="empty-note">Click a course card to view details and equivalency information.</p>
+          )}
+
+          {selectedEquivalentCode && (
+            <EquivalentSlideOver
+              courseCode={selectedEquivalentCode}
+              onClose={() => setSelectedEquivalentCode(null)}
+            />
           )}
         </aside>
       </main>
@@ -693,6 +786,106 @@ function HighlightLegend({
     </div>
   );
 }
+// ─── Equivalent course boxes & slide-over ─────────────────────────────────────
+
+interface EquivalentBox {
+  code: string;
+  title?: string;
+  fromOutline: boolean;
+  fromSeed: boolean;
+}
+
+interface EquivalentBoxCardProps {
+  box: EquivalentBox;
+  isActive: boolean;
+  onSelect: () => void;
+}
+
+function EquivalentBoxCard({ box, isActive, onSelect }: EquivalentBoxCardProps) {
+  return (
+    <div
+      className={`equiv-box${isActive ? " active" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+    >
+      <div className="equiv-box-header">
+        <strong>{box.code}</strong>
+        <span className="equiv-box-badges">
+          {box.fromSeed && <span className="equiv-badge seed">Seed</span>}
+          {box.fromOutline && <span className="equiv-badge outline">Outline</span>}
+        </span>
+      </div>
+      {box.title && <span className="equiv-box-title">{box.title}</span>}
+    </div>
+  );
+}
+
+interface EquivalentSlideOverProps {
+  courseCode: string;
+  onClose: () => void;
+}
+
+function EquivalentSlideOver({ courseCode, onClose }: EquivalentSlideOverProps) {
+  const liveData = useLiveCourseData(courseCode);
+  const normalized = normalizeCourseCode(courseCode);
+  const courseId =
+    courseIdByCode.get(normalized) ?? courseIdByCode.get(normalized.replace(/\s+/g, ""));
+  const seedCourse = courseId ? courseById[courseId] : undefined;
+
+  return (
+    <div className="equiv-slideover-backdrop" onClick={onClose}>
+      <aside
+        className="equiv-slideover"
+        aria-label={`Details for ${courseCode}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="equiv-slideover-close"
+          onClick={onClose}
+          aria-label="Close equivalent course panel"
+        >
+          ×
+        </button>
+
+        <h3>{courseCode}</h3>
+        {seedCourse && <p className="course-title-text">{seedCourse.title}</p>}
+        {seedCourse && <p>Credits: {seedCourse.credits}</p>}
+
+        <div className="live-section">
+          {liveData.status === "loading" && (
+            <p className="empty-note">Contacting SFU Outlines API…</p>
+          )}
+          {liveData.status === "not-offered" && (
+            <p className="empty-note">
+              No section found for the current or upcoming term, and no recent offering was found.
+            </p>
+          )}
+          {liveData.status === "error" && (
+            <p className="empty-note">Could not reach the SFU Outlines API right now.</p>
+          )}
+          {liveData.status === "success" && liveData.sharedOutline && (
+            <LiveOutlineBlock
+              sharedOutline={liveData.sharedOutline}
+              sections={liveData.sections}
+              isHistorical={liveData.isHistorical}
+              historicalLabel={liveData.historicalLabel}
+            />
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 // ─── Live Outline Block ───────────────────────────────────────────────────────
 
 function LiveOutlineBlock({ sharedOutline, sections, isHistorical, historicalLabel }: LiveOutlineBlockProps) {

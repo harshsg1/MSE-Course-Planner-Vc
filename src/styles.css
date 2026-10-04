@@ -287,9 +287,11 @@ body {
 }
 
 .details-panel {
+  position: relative;
   border-left: 1px solid var(--border);
   background: var(--surface);
   padding: 16px;
+  overflow: hidden;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -747,4 +749,141 @@ p.empty-note.historical-note {
   line-height: 1.35;
   margin: 4px 0 10px;
   color: var(--text-subtle);
+}
+
+/* ── Equivalent course boxes ── */
+.equiv-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.equiv-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.equiv-box:hover {
+  border-color: var(--primary);
+}
+
+.equiv-box:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.equiv-box.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.equiv-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.equiv-box-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.equiv-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.equiv-badge.seed {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.equiv-badge.outline {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.equiv-box-title {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* ── Equivalent course slide-over ── */
+.equiv-slideover-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+}
+
+[data-theme="dark"] .equiv-slideover-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.equiv-slideover {
+  position: relative;
+  width: min(100%, 380px);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px var(--shadow-soft);
+  padding: 16px;
+  animation: equiv-slide-in var(--transition-fast);
+}
+
+@keyframes equiv-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.equiv-slideover-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.equiv-slideover-close:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.equiv-slideover h3 {
+  margin: 0 32px 4px 0;
 }
