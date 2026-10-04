@@ -1,4 +1,4 @@
-# SFU MSE Course Navigator - Project Design Blueprint
+# SFU MSE Course Navigator - Project Design Blueprint 
 
 **Goal:** Build an updated planner for the Simon Fraser University Mechatronic Systems Engineering (MSE) program with modern UX, accurate prerequisite flow, and long-term maintainability.
 
