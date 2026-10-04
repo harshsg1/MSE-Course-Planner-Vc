@@ -75,3 +75,16 @@ export function computeCompletedCredits(
   }
   return total;
 }
+
+export const TERM_CREDIT_WARN_THRESHOLD = 18;
+
+export function computeTermCredits(
+  courseIds: string[],
+  courseById: Record<string, Course>
+): number {
+  let total = 0;
+  for (const id of courseIds) {
+    total += courseById[id]?.credits ?? 0;
+  }
+  return total;
+}

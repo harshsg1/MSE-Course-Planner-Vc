@@ -104,6 +104,7 @@ export interface SharedOutlineFields {
   description: string;
   prerequisites: string;
   corequisites: string;
+  notes?: string;
   educationalGoals?: string;
   grades?: { description: string; weight: string }[];
 }

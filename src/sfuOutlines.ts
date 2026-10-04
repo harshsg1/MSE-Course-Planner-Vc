@@ -43,6 +43,7 @@ interface SfuOutline {
   description: string;
   prerequisites: string;
   corequisites: string;
+  notes?: string;
   term: string;
   deliveryMethod: string;
   educationalGoals?: string;
@@ -129,6 +130,7 @@ function sharedOutlineFrom(outline: SfuOutline): SharedOutlineFields {
     description: outline.description,
     prerequisites: outline.prerequisites,
     corequisites: outline.corequisites,
+    notes: outline.notes,
     educationalGoals: outline.educationalGoals,
     grades: outline.grades,
   };
@@ -151,6 +153,8 @@ async function fetchSectionOutlines(
         if (!outline.courseSchedule && raw.courseSchedule) outline.courseSchedule = raw.courseSchedule;
         if (!outline.instructor && raw.instructor) outline.instructor = raw.instructor;
         if (!outline.grades && raw.grades) outline.grades = raw.grades;
+        if (!outline.notes && raw.info?.notes) outline.notes = raw.info.notes;
+        if (!outline.notes && raw.notes) outline.notes = raw.notes;
         return { outline, sectionName: section.value };
       } catch {
         return null;

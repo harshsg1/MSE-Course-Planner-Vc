@@ -1,4 +1,8 @@
 {
+  "math152": "Prerequisites:\n- MATH 151",
+  "math251": "Prerequisites:\n- MATH 152",
+  "math232": "Prerequisites:\n- MATH 151",
+  "phys141": "Prerequisites:\n- MSE 103",
   "mse112": "Prerequisites:\n- CMPT 130",
   "mse152": "Prerequisites:\n- CMPT 130",
   "mse210": "Prerequisites:\n- PHYS 141\n- MATH 150\n- MATH 151",
