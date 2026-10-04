@@ -378,14 +378,7 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
           {/*<button type="button">Import</button>
           <button type="button">Export</button>
           <button type="button">Settings</button>*/}
-          <label className="recursive-toggle">
-            <input
-              type="checkbox"
-              checked={recursiveHighlights}
-              onChange={(event) => setRecursiveHighlights(event.target.checked)}
-            />
-            Recursive highlights
-          </label>
+          
           <button
             type="button"
             className="theme-toggle"
@@ -421,6 +414,12 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
               </>
             ) : null}
           </p>
+
+          <HighlightLegend
+           roles={relationshipHighlights.roles}
+           recursiveHighlights={recursiveHighlights}
+           onToggleRecursive={setRecursiveHighlights}
+           />
 
           <div className="year-grid">
             {termsByYear.map((yearGroup) => (
@@ -461,38 +460,15 @@ function PlannerPage({ onOpenWelcome }: PlannerPageProps) {
               <p className="course-title-text">{selectedCourse.title}</p>
               <p>Credits: {selectedCourse.credits}</p>
 
-              <HighlightLegend roles={relationshipHighlights.roles} />
-
               {/* ── Live SFU Outline ── */}
               <div className="live-section">
-                <h4 className="live-section-header">
-                  Outline
-                  {liveData.status === "loading" && (
-                    <span className="live-badge loading">Fetching…</span>
-                  )}
-                  {liveData.status === "success" && liveData.isHistorical && liveData.historicalLabel && (
-                    <span className="live-badge warn">Last offered: {liveData.historicalLabel}</span>
-                  )}
-                  {liveData.status === "success" && !liveData.isHistorical && (
-                    <span className="live-badge success">
-                      {liveData.sections.length} section{liveData.sections.length !== 1 ? "s" : ""} found
-                    </span>
-                  )}
-                  {liveData.status === "not-offered" && (
-                    <span className="live-badge warn">Not found this term</span>
-                  )}
-                  {liveData.status === "error" && (
-                    <span className="live-badge error">API error</span>
-                  )}
-                </h4>
 
                 {liveData.status === "loading" && (
                   <p className="empty-note">Contacting SFU Outlines API…</p>
                 )}
                 {liveData.status === "not-offered" && (
                   <p className="empty-note">
-                    No section found for the current or upcoming term. The description above still
-                    applies.
+                    No section found for the current or upcoming term, and no recent offering was found.
                   </p>
                 )}
                 {liveData.status === "error" && (
@@ -662,7 +638,17 @@ function ScheduleSlotCard({
   );
 }
 
-function HighlightLegend({ roles }: { roles: Map<string, CourseHighlightRole> }) {
+interface HighlightLegendProps {
+  roles: Map<string, CourseHighlightRole>;
+  recursiveHighlights: boolean;
+  onToggleRecursive: (checked: boolean) => void;
+}
+
+function HighlightLegend({
+  roles,
+  recursiveHighlights,
+  onToggleRecursive,
+}: HighlightLegendProps) {
   const counts = useMemo(() => {
     const tally = { prerequisite: 0, corequisite: 0, dependent: 0 };
     for (const role of roles.values()) {
@@ -673,8 +659,10 @@ function HighlightLegend({ roles }: { roles: Map<string, CourseHighlightRole> })
     return tally;
   }, [roles]);
 
+  const hasSelection = roles.size > 0;
+
   return (
-    <div className="highlight-legend" aria-label="Course relationship legend">
+    <div className="highlight-legend" role="group" aria-label="Course relationship legend">
       <h4>Curriculum Relationships</h4>
       <div className="legend-item">
         <span className="legend-swatch selected" aria-hidden="true" />
@@ -682,20 +670,29 @@ function HighlightLegend({ roles }: { roles: Map<string, CourseHighlightRole> })
       </div>
       <div className="legend-item">
         <span className="legend-swatch prerequisite" aria-hidden="true" />
-        Prerequisites ({counts.prerequisite})
+        Prerequisites{hasSelection && ` (${counts.prerequisite})`}
       </div>
       <div className="legend-item">
         <span className="legend-swatch corequisite" aria-hidden="true" />
-        Corequisites ({counts.corequisite})
+        Corequisites{hasSelection && ` (${counts.corequisite})`}
       </div>
       <div className="legend-item">
         <span className="legend-swatch dependent" aria-hidden="true" />
-        Dependent courses ({counts.dependent})
+        Dependent courses{hasSelection && ` (${counts.dependent})`}
       </div>
+      
+      {/* Placed inside the legend container */}
+      <label className="recursive-toggle">
+        <input
+          type="checkbox"
+          checked={recursiveHighlights}
+          onChange={(event) => onToggleRecursive(event.target.checked)}
+        />
+        Recursive highlights
+      </label>
     </div>
   );
 }
-
 // ─── Live Outline Block ───────────────────────────────────────────────────────
 
 function LiveOutlineBlock({ sharedOutline, sections, isHistorical, historicalLabel }: LiveOutlineBlockProps) {
@@ -706,79 +703,102 @@ function LiveOutlineBlock({ sharedOutline, sections, isHistorical, historicalLab
   }, {});
 
   return (
-    <div className="live-outline">
-      {isHistorical && historicalLabel && (
-        <p className="empty-note historical-note">
-          Not offered in the current or upcoming term. Showing the most recent outline from{" "}
-          {historicalLabel}.
-        </p>
-      )}
+    <details className="live-outline-details" open>
+      <summary className="live-outline-summary">
+        <span className="summary-title">Outline</span>
+        {isHistorical && historicalLabel && (
+          <span className="live-badge warn">Last offered: {historicalLabel}</span>
+        )}
+        {!isHistorical && sections.length > 0 && (
+          <span className="live-badge success">AVAILABLE ({sections.length})</span>
+        )}
+      </summary>
 
-      {/* Course description from the API */}
-      {sharedOutline.description && (
-        <div className="outline-field outline-description">
-          <span className="meta-label">Description:</span>
-          <p className="outline-description-text">{sharedOutline.description}</p>
-        </div>
-      )}
+      <div className="live-outline">
+        {isHistorical && historicalLabel && (
+          <p className="empty-note historical-note">
+            Not offered in the current or upcoming term. Showing the most recent outline from{" "}
+            {historicalLabel}.
+          </p>
+        )}
 
-      {sharedOutline.prerequisites && (
-        <div className="outline-field">
-          <span className="meta-label">Prerequisites:</span> {sharedOutline.prerequisites}
-        </div>
-      )}
+        {/* Course description from the API */}
+        {sharedOutline.description && (
+          <div className="outline-field outline-description">
+            <span className="meta-label">Description:</span>
+            <p className="outline-description-text">{sharedOutline.description}</p>
+          </div>
+        )}
 
-      {sharedOutline.corequisites && (
-        <div className="outline-field">
-          <span className="meta-label">Corequisites:</span> {sharedOutline.corequisites}
-        </div>
-      )}
+        {sharedOutline.prerequisites && (
+          <div className="outline-field">
+            <span className="meta-label">Prerequisites:</span> {sharedOutline.prerequisites}
+          </div>
+        )}
 
-      {/* Per-semester offerings */}
-      {Object.entries(byTerm).map(([termLabel, termSections]) => (
-        <div key={termLabel} className="outline-term-group">
-          <p className="outline-term-heading">{termLabel}</p>
-          <ul className="inline-list">
-            {termSections.map((sec, i) => {
-              const instructorNames =
-                sec.instructors.length > 0
-                  ? sec.instructors.map((inst) => inst.name).join(", ")
-                  : "Instructor TBA";
-              return (
-                <li key={i} className="outline-section-row">
-                  <span className="section-tag">{sec.sectionName}</span>
-                  <span className="section-campus">{sec.campus}</span>
-                  <span className="section-instructor">{instructorNames}</span>
-                  {sec.deliveryMethod && (
-                    <span className="section-delivery">{sec.deliveryMethod}</span>
-                  )}
+        {sharedOutline.corequisites && (
+          <div className="outline-field">
+            <span className="meta-label">Corequisites:</span> {sharedOutline.corequisites}
+          </div>
+        )}
+
+        {/* Per-semester offerings */}
+        {Object.entries(byTerm).map(([termLabel, termSections]) => (
+          <div key={termLabel} className="outline-term-group">
+            <p className="outline-term-heading">{termLabel}</p>
+            <ul className="inline-list">
+              {termSections.map((sec, i) => {
+                const instructorNames =
+                  sec.instructors.length > 0
+                    ? sec.instructors.map((inst) => inst.name).join(", ")
+                    : "Instructor TBA";
+                return (
+                  <li key={i} className="outline-section-row">
+                    <span className="section-tag">{sec.sectionName}</span>
+                    <span className="section-campus">{sec.campus}</span>
+                    <span className="section-instructor">{instructorNames}</span>
+                    {sec.deliveryMethod && (
+                      <span className="section-delivery">{sec.deliveryMethod}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+
+        {sharedOutline.grades && sharedOutline.grades.length > 0 && (
+          <div className="outline-field">
+            <span className="meta-label">Grading:</span>
+            <ul className="inline-list">
+              {sharedOutline.grades.map((g, i) => (
+                <li key={i}>
+                  {g.description}: {g.weight}%
                 </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {sharedOutline.grades && sharedOutline.grades.length > 0 && (
-        <div className="outline-field">
-          <span className="meta-label">Grading:</span>
-          <ul className="inline-list">
-            {sharedOutline.grades.map((g, i) => (
-              <li key={i}>
-                {g.description}: {g.weight}%
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {sharedOutline.educationalGoals && (
-        <details className="outline-goals">
-          <summary>Educational Goals</summary>
-          <p>{sharedOutline.educationalGoals}</p>
-        </details>
-      )}
-    </div>
+        {sharedOutline.educationalGoals && (
+          <details className="outline-goals">
+            <summary>Educational Goals</summary>
+            <div className="outline-goals-content">
+              {sharedOutline.educationalGoals
+                .replace(/<[^>]+>/g, "")
+                .split(/(?=\s*-[A-Z])/)
+                .map((item) => item.trim())
+                .filter(Boolean)
+                .map((goal, index) => (
+                  <p key={index} style={{ margin: "4px 0" }}>
+                    {goal}
+                  </p>
+                ))}
+            </div>
+          </details>
+        )}
+      </div>
+    </details>
   );
 }
 
