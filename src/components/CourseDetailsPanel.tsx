@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { courseById, courseEquivalencies, courses } from "../data";
 import { useLiveCourseData } from "../hooks/useLiveCourseData";
 import { Course, OfferedSection, SharedOutlineFields } from "../types";
-import { buildCourseCodeIndex, normalizeCourseCode } from "../utils/courseCodes";
+import { buildCourseCodeIndex, isPlaceholderCourse, normalizeCourseCode } from "../utils/courseCodes";
 import { parseEquivalents } from "../utils/parseEquivalents";
 
 const courseIdByCode = buildCourseCodeIndex(courses);
@@ -222,7 +222,8 @@ interface CourseDetailsPanelProps {
 
 export function CourseDetailsPanel({ selectedCourse }: CourseDetailsPanelProps) {
   const [selectedEquivalentCode, setSelectedEquivalentCode] = useState<string | null>(null);
-  const liveData = useLiveCourseData(selectedCourse?.code ?? null);
+  const isPlaceholder = selectedCourse ? isPlaceholderCourse(selectedCourse) : false;
+  const liveData = useLiveCourseData(isPlaceholder ? null : selectedCourse?.code ?? null);
 
   useEffect(() => {
     setSelectedEquivalentCode(null);
@@ -300,24 +301,33 @@ export function CourseDetailsPanel({ selectedCourse }: CourseDetailsPanelProps) 
           <p>Credits: {selectedCourse.credits}</p>
 
           <div className="live-section">
-            {liveData.status === "loading" && (
-              <p className="empty-note">Contacting SFU Outlines API…</p>
-            )}
-            {liveData.status === "not-offered" && (
+            {isPlaceholder ? (
               <p className="empty-note">
-                No section found for the current or upcoming term, and no recent offering was found.
+                This is a planner slot (elective, CO-OP, or similar), not a catalog course, so no
+                SFU outline is fetched.
               </p>
-            )}
-            {liveData.status === "error" && (
-              <p className="empty-note">Could not reach the SFU Outlines API right now.</p>
-            )}
-            {liveData.status === "success" && liveData.sharedOutline && (
-              <LiveOutlineBlock
-                sharedOutline={liveData.sharedOutline}
-                sections={liveData.sections}
-                isHistorical={liveData.isHistorical}
-                historicalLabel={liveData.historicalLabel}
-              />
+            ) : (
+              <>
+                {liveData.status === "loading" && (
+                  <p className="empty-note">Contacting SFU Outlines API…</p>
+                )}
+                {liveData.status === "not-offered" && (
+                  <p className="empty-note">
+                    No section found for the current or upcoming term, and no recent offering was found.
+                  </p>
+                )}
+                {liveData.status === "error" && (
+                  <p className="empty-note">Could not reach the SFU Outlines API right now.</p>
+                )}
+                {liveData.status === "success" && liveData.sharedOutline && (
+                  <LiveOutlineBlock
+                    sharedOutline={liveData.sharedOutline}
+                    sections={liveData.sections}
+                    isHistorical={liveData.isHistorical}
+                    historicalLabel={liveData.historicalLabel}
+                  />
+                )}
+              </>
             )}
           </div>
 

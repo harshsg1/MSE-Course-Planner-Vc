@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import type { DragEvent } from "react";
 import { courseById } from "../data";
 import { Course, CourseHighlightRole, CourseSlot } from "../types";
@@ -51,6 +51,7 @@ export function ScheduleSlotCard({
 }: ScheduleSlotCardProps) {
   const courseIds = slotCourseIds(slot);
   const isChoiceGroup = courseIds.length > 1;
+  const suppressClickRef = useRef(false);
 
   return (
     <div
@@ -72,12 +73,18 @@ export function ScheduleSlotCard({
               <div
                 className={`${getCourseCardClassName(course.id, highlightRoles)}${
                   isCompleted ? " completed" : ""
-                }`}
+                }${draggable ? " is-draggable" : ""}`}
                 role="button"
                 tabIndex={0}
                 draggable={draggable}
                 aria-pressed={selectedCourseId === course.id}
-                onClick={() => onSelect(course)}
+                onClick={() => {
+                  if (suppressClickRef.current) {
+                    suppressClickRef.current = false;
+                    return;
+                  }
+                  onSelect(course);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
@@ -86,10 +93,18 @@ export function ScheduleSlotCard({
                 }}
                 onDragStart={
                   draggable && onCourseDragStart
-                    ? (event) => onCourseDragStart(event, course.id)
+                    ? (event) => {
+                        suppressClickRef.current = true;
+                        onCourseDragStart(event, course.id);
+                      }
                     : undefined
                 }
-                onDragEnd={onCourseDragEnd}
+                onDragEnd={() => {
+                  onCourseDragEnd?.();
+                  window.setTimeout(() => {
+                    suppressClickRef.current = false;
+                  }, 0);
+                }}
               >
                 <label
                   className="course-checkbox"
@@ -97,6 +112,7 @@ export function ScheduleSlotCard({
                 >
                   <input
                     type="checkbox"
+                    draggable={false}
                     checked={isCompleted}
                     onClick={(event) => event.stopPropagation()}
                     onChange={() => onToggleCompleted(course.id)}
@@ -106,18 +122,19 @@ export function ScheduleSlotCard({
                 <strong>{course.code}</strong>
                 <span>{course.title}</span>
                 {moveOptions && onMoveToTerm && (
-                <label
-                  className="course-move-control"
-                  onClick={(event) => event.stopPropagation()}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
+                  <label
+                    className="course-move-control"
+                    onClick={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <span className="visually-hidden">
                       {currentTermId ? `Move ${course.code}` : `Add ${course.code}`}
                     </span>
                     <select
                       value=""
-                      aria-label={currentTermId ? `Move ${course.code}` : `Add ${course.code}`}
+                      draggable={false}
+                      aria-label={currentTermId ? `Move ${course.code} to another term` : `Add ${course.code} to a term`}
                       onChange={(event) => {
                         const value = event.target.value;
                         event.target.value = "";
@@ -129,9 +146,7 @@ export function ScheduleSlotCard({
                         onMoveToTerm(course.id, value);
                       }}
                     >
-                      <option value="">
-                        {currentTermId ? "Move to…" : "Add to…"}
-                      </option>
+                      <option value="">{currentTermId ? "Move to…" : "Add to…"}</option>
                       {moveOptions.map((option) => (
                         <option key={option.id} value={option.id} disabled={option.disabled}>
                           {option.label}

@@ -12,6 +12,10 @@ export function parseCourseCode(code: string): { dept: string; number: string } 
 }
 
 export function isPlaceholderCourse(course: { code: string }): boolean {
+  const code = normalizeCourseCode(course.code);
+  if (code === "CO-OP" || code.includes("ELEC") || code.includes("4XX") || code.includes("3XX")) {
+    return true;
+  }
   return parseCourseCode(course.code) === null;
 }
 

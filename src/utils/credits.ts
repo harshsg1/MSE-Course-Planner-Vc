@@ -84,7 +84,10 @@ export function computeTermCredits(
 ): number {
   let total = 0;
   for (const id of courseIds) {
-    total += courseById[id]?.credits ?? 0;
+    const course = courseById[id];
+    if (!course) continue;
+    if (course.code.trim().toUpperCase() === "CO-OP") continue;
+    total += course.credits ?? 0;
   }
   return total;
 }
