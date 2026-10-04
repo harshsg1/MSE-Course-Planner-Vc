@@ -191,6 +191,11 @@ export function CustomSchedulePage({ onOpenWelcome }: CustomSchedulePageProps) {
     setPlan((current) => removeCourseFromPlan(current, payload.courseId, payload.fromTermId ?? undefined));
   };
 
+  const keepDrag = (event: DragEvent) => {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  };
+
   const termDropState = (termId: string): "valid" | "invalid" | null => {
     if (!dragging) return null;
     return canPlaceCourse(plan, dragging.courseId, termId, dragging.fromTermId) ? "valid" : "invalid";
@@ -263,12 +268,12 @@ export function CustomSchedulePage({ onOpenWelcome }: CustomSchedulePageProps) {
             hoverTarget === "picker" && pickerDropActive ? " drop-hover" : ""
           }`}
           onDragOver={(event) => {
-            if (!dragging?.fromTermId) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            setHoverTarget("picker");
+            keepDrag(event);
+            if (dragging?.fromTermId) setHoverTarget("picker");
           }}
-          onDragLeave={() => {
+          onDragLeave={(event) => {
+            const next = event.relatedTarget as Node | null;
+            if (next && event.currentTarget.contains(next)) return;
             if (hoverTarget === "picker") setHoverTarget(null);
           }}
           onDrop={dropOnPicker}
@@ -368,19 +373,22 @@ export function CustomSchedulePage({ onOpenWelcome }: CustomSchedulePageProps) {
                         key={term.id}
                         className={`term-column${over ? " term-over-credits" : ""}${dropClass}${hoverClass}`}
                         onDragOver={(event) => {
-                          if (!dragging) return;
-                          event.preventDefault();
-                          event.dataTransfer.dropEffect = canPlaceCourse(
-                            plan,
-                            dragging.courseId,
-                            term.id,
-                            dragging.fromTermId
-                          )
-                            ? "move"
-                            : "none";
+                          keepDrag(event);
+                          if (dragging) {
+                            event.dataTransfer.dropEffect = canPlaceCourse(
+                              plan,
+                              dragging.courseId,
+                              term.id,
+                              dragging.fromTermId
+                            )
+                              ? "move"
+                              : "none";
+                          }
                           setHoverTarget(term.id);
                         }}
-                        onDragLeave={() => {
+                        onDragLeave={(event) => {
+                          const next = event.relatedTarget as Node | null;
+                          if (next && event.currentTarget.contains(next)) return;
                           if (hoverTarget === term.id) setHoverTarget(null);
                         }}
                         onDrop={(event) => dropOnTerm(event, term.id)}

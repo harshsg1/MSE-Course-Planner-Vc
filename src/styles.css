@@ -239,6 +239,14 @@ body {
     transform var(--transition-fast);
 }
 
+.course-card.is-draggable {
+  cursor: grab;
+}
+
+.course-card.is-draggable:active {
+  cursor: grabbing;
+}
+
 .course-card:hover {
   border-color: var(--primary);
   transform: translateY(-1px);
@@ -914,6 +922,10 @@ p.empty-note.historical-note {
 
 .custom-layout {
   grid-template-columns: minmax(220px, 280px) 1fr 320px;
+}
+
+.custom-layout .term-column .course-list {
+  min-height: 72px;
 }
 
 .picker-panel {

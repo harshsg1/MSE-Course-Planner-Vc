@@ -5,10 +5,12 @@ import App from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
 import "./styles.css";
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename === "/" ? undefined : basename}>
         <App />
       </BrowserRouter>
     </ThemeProvider>
